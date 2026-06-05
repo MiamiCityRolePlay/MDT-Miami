@@ -24,7 +24,7 @@
         
         /* Formulario Login */
         .form-container {
-            background: #0b111e;
+            background: #0b1329;
             border: 1px solid #1e3a8a;
             padding: 30px;
             border-radius: 8px;
@@ -37,19 +37,6 @@
             color: #38bdf8;
             margin-bottom: 10px;
             letter-spacing: 2px;
-        }
-
-        .mdt-input-login {
-            width: 100%;
-            background: #040814;
-            border: 1px solid #1e293b;
-            color: #fff;
-            padding: 10px 12px;
-            border-radius: 4px;
-            font-size: 13px;
-            outline: none;
-            margin-top: 10px;
-            display: block;
         }
 
         .btn-submit {
@@ -206,7 +193,7 @@
         .denuncia-layout-container { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; margin-top: 15px; }
         .denuncia-sidebar { display: flex; flex-direction: column; padding: 15px; background: #050a14; min-height: 300px; }
         .denuncia-list-scroller { flex: 1; overflow-y: auto; }
-        .denuncia-item-btn { padding: 10px; background: #0f172a; border: 1px solid #1e293b; margin-bottom: 8px; border-radius: 4px; cursor: pointer; width: 100%; text-align: left; color: white; }
+        .denuncia-item-btn { padding: 10px; background: #0f172a; border: 1px solid #1e293b; margin-bottom: 8px; border-radius: 4px; cursor: pointer; }
         .denuncia-item-btn:hover { border-color: #38bdf8; }
         .denuncia-viewer-panel { background: #040813; padding: 20px; min-height: 300px; text-align: left; }
         
@@ -230,19 +217,6 @@
         .permiso-mini-tag { font-size: 9px; font-weight: bold; padding: 2px 5px; border-radius: 3px; background: #1e3a8a; color: #4b5563; }
         .permiso-mini-tag.active { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
     </style>
-</head>
-<body>
-
-    <div id="login-screen" class="form-container">
-        <h2>CENTRO FBI</h2>
-        <p style="font-size:12px; color:#6b7280;">Solicitud de Credenciales Federales</p>
-        <input type="text" id="nameIC" class="mdt-input-login" placeholder="Nombre Completo IC (Ej: Sebastian Garcia)">
-        <input type="text" id="discordUser" class="mdt-input-login" placeholder="Usuario de Discord (Ej: chetos_uwu11)">
-        <button class="btn-submit" onclick="enviarSolicitud()">SOLICITAR ACCESO</button>
-        <div id="estado-login"></div>
-    </div>
-
-    <div id="mdt-screen" style="display: none; width: 100vw; height: 100vh;"></div>
 
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
@@ -250,12 +224,26 @@
         const SUPABASE_URL = "https://syugspcppbzieskmocyq.supabase.co";
         const SUPABASE_ANON_KEY = "sb_publishable__reGmixfnZZXZJ2bH2dRyQ_TNywh0vo"; 
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const DISCORD_GUILD_ID = "1497062121563750400"; 
 
+        let ciudadanoSeleccionado = null;
         let agenteActual = "";
         let nombreICActual = "";
         let rangoAgenteActual = "Agente en Prácticas";
         let enServicio = true;
         let chequeoIntervalo = null;
+        
+        // Lista de rangos por defecto en caso de fallo o desincronización de tablas
+        let listaRangosDB = [
+            "Agente en Prácticas", 
+            "Agente de Campo", 
+            "Agente Especial", 
+            "Supervisor de Unidad", 
+            "Jefe de Inteligencia", 
+            "Subdirector del FBI", 
+            "Director del FBI", 
+            "Administrador de Red / Comandante"
+        ]; 
 
         window.addEventListener('DOMContentLoaded', async () => {
             const usuarioGuardado = localStorage.getItem('fbi_usuario_discord');
@@ -339,14 +327,10 @@
         }
 
         function mostrarPantallaMDT(usuario, nombreIC) {
-            document.getElementById('login-screen').style.display = 'none';
-            const mdtScreen = document.getElementById('mdt-screen');
-            mdtScreen.style.display = 'block';
-
             const esAdmin = (usuario.toLowerCase() === "chetos_uwu11" || nombreIC.toLowerCase() === "sebastian garcia" || rangoAgenteActual.includes("Director") || rangoAgenteActual.includes("Comandante"));
             const botonAdminSidebar = esAdmin ? `<div class="menu-item" id="btn-admin-menu" onclick="cambiarPestaña('admin')">⚙️ Panel Comandancia</div>` : '';
 
-            mdtScreen.innerHTML = `
+            document.body.innerHTML = `
                 <div class="mdt-container">
                     <div class="mdt-topbar">
                         <div class="logo-section">
@@ -402,19 +386,55 @@
                             <div id="vista-ciudadanos" style="display: none;">
                                 <div class="content-header">
                                     <h1>Registro de Ciudadanos</h1>
-                                    <p>Censo poblacional temporal de agentes activos.</p>
+                                    <p>Censo poblacional sincronizado mediante satélite.</p>
                                 </div>
                                 <div class="card card-full">
                                     <table class="table-ciudadanos">
                                         <thead>
                                             <tr>
-                                                <th>AGENTE DETECTADO</th>
-                                                <th>ESTADO ASIGNADO</th>
-                                                <th>ACCIONES</th>
+                                                <th>NOMBRE CIUDADANO</th>
+                                                <th>ESTADO LEGAL</th>
+                                                <th>HISTORIAL</th>
                                             </tr>
                                         </thead>
                                         <tbody id="tabla-miembros-body"></tbody>
                                     </table>
+                                </div>
+                            </div>
+
+                            <div id="vista-ficha" style="display: none;">
+                                <div class="content-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                    <h1 id="ficha-nombre-ciudadano">PERFIL DE CIUDADANO</h1>
+                                    <button class="btn-back" onclick="cambiarPestaña('ciudadanos')">⬅ VOLVER AL CENSO</button>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 3fr; gap: 20px; margin-bottom: 25px;">
+                                    <div class="card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+                                        <div style="font-size: 64px;">👤</div>
+                                        <div id="ficha-id-ciudadano" style="color: #38bdf8; font-weight: 700; font-size: 14px; margin-top:5px;">-</div>
+                                    </div>
+                                    <div class="card" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; background: #0b111e;">
+                                        <div><label class="input-label">TELÉFONO</label><input type="text" class="mdt-input" value="559-83021"></div>
+                                        <div><label class="input-label">CUENTA BANCARIA</label><input type="text" class="mdt-input" value="US-069332"></div>
+                                        <div><label class="input-label">EMPLEO</label><input type="text" class="mdt-input" value="Civil / Empleado"></div>
+                                    </div>
+                                </div>
+                                <div class="card" style="display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(239, 68, 68, 0.2);">
+                                    <div><span style="font-size: 11px; color:#6b7280;">ESTATUS LEGAL</span><div id="ficha-estado-legal">-</div></div>
+                                    <button id="btn-toggle-busqueda" class="btn-submit" style="width: auto; padding: 10px 20px; margin-top:0;" onclick="alternarBusquedaFicha()">CAMBIAR ESTADO</button>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                    <div class="card">
+                                        <h3>Informes de Inteligencia</h3>
+                                        <div id="contenedor-notes" class="scroller-box"></div>
+                                        <textarea id="nueva-nota-texto" placeholder="Nuevo informe..." rows="2" class="mdt-textarea"></textarea>
+                                        <button onclick="guardarNotaFbi('nota')" class="btn-submit">AÑADIR INFORME</button>
+                                    </div>
+                                    <div class="card">
+                                        <h3>Sanciones / Multas</h3>
+                                        <div id="contenedor-multas-fbi" class="scroller-box"></div>
+                                        <textarea id="nueva-multa-texto" placeholder="Cargo..." rows="2" class="mdt-textarea">[MULTA] </textarea>
+                                        <button onclick="guardarNotaFbi('multa')" class="btn-submit" style="background:#f59e0b;">EMITIR MULTA</button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -426,6 +446,7 @@
                                 
                                 <div class="card card-full" style="background: #0b1224; border-color: #1e3a8a;">
                                     <h3 style="color: #38bdf8;">+ REDACTAR NUEVA DENUNCIA / REPORTE</h3>
+                                    
                                     <div class="grid-inputs-form">
                                         <div class="input-block">
                                             <label class="input-label">Título de la denuncia</label>
@@ -436,10 +457,12 @@
                                             <input type="text" id="denuncia-ciudadano" class="mdt-input" placeholder="Ej: Desconocido / Sospechoso">
                                         </div>
                                     </div>
+                                    
                                     <div class="input-block" style="margin-bottom:10px;">
                                         <label class="input-label">Descripción del reporte</label>
                                         <textarea id="denuncia-descripcion" rows="4" class="mdt-textarea" placeholder="Escribe los hechos detallados aquí..."></textarea>
                                     </div>
+                                    
                                     <button class="btn-submit" style="background:#10b981; border-color:#34d399; margin-top:5px;" onclick="procesarGuardarDenuncia()">GUARDAR EXPEDIENTE EN SUPABASE</button>
                                 </div>
 
@@ -515,19 +538,13 @@
                     </div>
                 </div>
             `;
-            actualizarListaRangosLocales();
-            cargarSolicitudesAdmin();
-            cargarAgentesCenso();
-            cargarDenunciasDB();
         }
 
         window.alternarServicio = function() {
             enServicio = !enServicio;
             const btn = document.getElementById('btn-servicio');
-            if(btn) {
-                btn.innerText = enServicio ? "EN SERVICIO" : "FUERA DE SERVICIO";
-                btn.className = enServicio ? "btn-duty duty-on" : "btn-duty duty-off";
-            }
+            btn.innerText = enServicio ? "EN SERVICIO" : "FUERA DE SERVICIO";
+            btn.className = enServicio ? "btn-duty duty-on" : "btn-duty duty-off";
         }
 
         window.toggleMenuCerrar = function() {
@@ -538,218 +555,373 @@
         window.cerrarSesion = function() {
             if(chequeoIntervalo) clearInterval(chequeoIntervalo);
             localStorage.clear();
-            location.reload();
+            window.location.reload();
         }
 
-        window.cambiarPestaña = function(pestaña) {
-            const vistas = ['panel', 'ciudadanos', 'denuncias', 'admin'];
+        window.cambiarPestaña = async function(pestaña) {
+            const vistas = ['panel', 'ciudadanos', 'ficha', 'denuncias', 'admin'];
             vistas.forEach(v => {
                 const el = document.getElementById(`vista-${v}`);
-                if(el) el.style.display = 'none';
-                const btn = document.getElementById(`btn-${v === 'admin' ? 'admin-menu' : v}`);
-                if(btn) btn.classList.remove('active');
+                if(el) el.style.display = v === pestaña ? 'block' : 'none';
             });
-
-            const vistaActiva = document.getElementById(`vista-${pestaña}`);
-            if(vistaActiva) vistaActiva.style.display = 'block';
-            
-            const btnActivo = document.getElementById(`btn-${pestaña === 'admin' ? 'admin-menu' : pestaña}`);
-            if(btnActivo) btnActivo.classList.add('active');
-        }
-
-        // ==========================================
-        //  MÓDULO DE GESTIÓN DE RANGOS (COMANDANCIA)
-        // ==========================================
-        window.crearRangoNuevoBaseDatos = async function() {
-            const nombre = document.getElementById('nuevo-rango-nombre').value.trim();
-            const intel = document.getElementById('permiso-ver-denuncias').checked;
-            const ciudadanos = document.getElementById('permiso-ver-ciudadanos').checked;
-            const admin = document.getElementById('permiso-admin-panel').checked;
-
-            if(!nombre) return alert("Escribe el nombre del rango.");
-
-            const { error } = await supabase
-                .from('fbi_rangos')
-                .insert([{
-                    nombre_rango: nombre,
-                    acceso_inteligencia: intel,
-                    ver_multar: ciudadanos,
-                    permiso_admin: admin
-                }]);
-
-            if(error) {
-                alert("Error de conexión a la tabla fbi_rangos.");
-            } else {
-                alert("Rango guardado exitosamente.");
-                document.getElementById('nuevo-rango-nombre').value = "";
-                actualizarListaRangosLocales();
-            }
+            ['panel', 'ciudadanos', 'denuncias-menu', 'admin-menu'].forEach(id => {
+                const el = document.getElementById(`btn-${id}`);
+                if(el) el.classList.toggle('active', id.replace('-menu','') === pestaña);
+            });
+            if(pestaña === 'ciudadanos') await cargarCiudadanos();
+            if(pestaña === 'denuncias') await cargarLibroDenuncias();
+            if(pestaña === 'admin') await cargarAgentesComandancia();
         }
 
         async function actualizarListaRangosLocales() {
             const container = document.getElementById('lista-rangos-existentes-container');
             if(!container) return;
-
-            const { data, error } = await supabase.from('fbi_rangos').select('*').order('id', { ascending: true });
-            if(error || !data) return;
-
-            container.innerHTML = data.map(r => `
-                <div class="rango-badge-item">
-                    <span><strong>${r.nombre_rango}</strong></span>
-                    <div class="rango-permisos-lista">
-                        <span class="permiso-mini-tag ${r.acceso_inteligencia ? 'active' : ''}">INTEL</span>
-                        <span class="permiso-mini-tag ${r.ver_multar ? 'active' : ''}">CENSO</span>
-                        <span class="permiso-mini-tag ${r.permiso_admin ? 'active' : ''}">ADM</span>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        // ==========================================
-        //  MÓDULO DE SOLICITUDES / ACCESO AGENTES
-        // ==========================================
-        async function cargarSolicitudesAdmin() {
-            const tbody = document.getElementById('tabla-admin-solicitudes');
-            if(!tbody) return;
-
-            const { data, error } = await supabase.from('solicitudes_fbi').select('*');
-            if(error || !data) return;
-
-            tbody.innerHTML = data.map(s => `
-                <tr>
-                    <td><strong>${s.usuario_discord}</strong></td>
-                    <td><span style="color:${s.estado==='aceptado'?'#10b981':'#eab308'}">${s.estado.toUpperCase()}</span></td>
-                    <td>${s.rango || 'Agente en Prácticas'}</td>
-                    <td>
-                        <select class="mdt-select" style="margin-top:0; padding:4px;" onchange="cambiarRangoAgente('${s.usuario_discord}', this.value)">
-                            <option value="">-- Cambiar Rango --</option>
-                            <option value="Agente de Campo">Agente de Campo</option>
-                            <option value="Agente Especial">Agente Especial</option>
-                            <option value="Supervisor de Unidad">Supervisor de Unidad</option>
-                            <option value="Jefe de Inteligencia">Jefe de Inteligencia</option>
-                            <option value="Subdirector del FBI">Subdirector del FBI</option>
-                            <option value="Director del FBI">Director del FBI</option>
-                        </select>
-                    </td>
-                    <td>
-                        ${s.estado === 'pendiente' ? `<button class="btn-admin-action" style="background:#10b981;" onclick="resolverSolicitud('${s.usuario_discord}', 'aceptado')">Aceptar</button>` : ''}
-                        <button class="btn-admin-action btn-delete" onclick="eliminarSolicitud('${s.usuario_discord}')">Eliminar</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        window.resolverSolicitud = async function(user, nuevoEstado) {
-            await supabase.from('solicitudes_fbi').update({ estado: nuevoEstado }).eq('usuario_discord', user);
-            cargarSolicitudesAdmin();
-            cargarAgentesCenso();
-        }
-
-        window.cambiarRangoAgente = async function(user, nuevoRango) {
-            if(!nuevoRango) return;
-            await supabase.from('solicitudes_fbi').update({ rango: nuevoRango, estado: 'aceptado' }).eq('usuario_discord', user);
-            alert("Rango actualizado con éxito.");
-            cargarSolicitudesAdmin();
-            cargarAgentesCenso();
-        }
-
-        window.eliminarSolicitud = async function(user) {
-            if(confirm("¿Eliminar este registro de acceso de la base de datos?")) {
-                await supabase.from('solicitudes_fbi').delete().eq('usuario_discord', user);
-                cargarSolicitudesAdmin();
-                cargarAgentesCenso();
+            
+            try {
+                const { data, error } = await supabase.from('fbi_rangos').select('*').order('id', {ascending: true});
+                
+                if(!error && data && data.length > 0) {
+                    const nuevosRangos = data.map(r => r.nombre_rango);
+                    listaRangosDB = [...new Set([...listaRangosDB, ...nuevosRangos])];
+                    
+                    container.innerHTML = "";
+                    data.forEach(r => {
+                        const div = document.createElement('div');
+                        div.className = "rango-badge-item";
+                        div.innerHTML = `
+                            <span style="font-weight: 600; color: #e2e8f0;">🎖️ ${r.nombre_rango}</span>
+                            <div class="rango-permisos-lista">
+                                <div class="permiso-mini-tag ${r.permiso_denuncias ? 'active' : ''}">DEN</div>
+                                <div class="permiso-mini-tag ${r.permiso_ciudadanos ? 'active' : ''}">CIU</div>
+                                <div class="permiso-mini-tag ${r.permiso_admin ? 'active' : ''}">ADM</div>
+                            </div>
+                        `;
+                        container.appendChild(div);
+                    });
+                } else {
+                    pintarRangosPorDefecto(container);
+                }
+            } catch(e) {
+                pintarRangosPorDefecto(container);
             }
         }
 
-        // ==========================================
-        //  MÓDULO DE CENSO / MIEMBROS DEL FBI
-        // ==========================================
-        async function cargarAgentesCenso() {
-            const tbody = document.getElementById('tabla-miembros-body');
-            if(!tbody) return;
-
-            const { data, error } = await supabase.from('solicitudes_fbi').select('*').eq('estado', 'aceptado');
-            if(error || !data) return;
-
-            tbody.innerHTML = data.map(a => `
-                <tr>
-                    <td><strong>👤 ${a.usuario_discord.toUpperCase()}</strong></td>
-                    <td><span class="licencia-tag tag-residente">${a.rango ? a.rango.toUpperCase() : 'AGENTE'}</span></td>
-                    <td><button class="btn-back" style="padding:4px 8px; font-size:11px;" onclick="alert('Historial operativo encriptado.')">Ver Registro</button></td>
-                </tr>
-            `).join('');
+        function pintarRangosPorDefecto(container) {
+            container.innerHTML = "";
+            listaRangosDB.forEach(r => {
+                const div = document.createElement('div');
+                div.className = "rango-badge-item";
+                div.innerHTML = `
+                    <span style="font-weight: 600; color: #6b7280;">🎖️ ${r}</span>
+                    <div class="rango-permisos-lista">
+                        <div class="permiso-mini-tag active">DEN</div>
+                        <div class="permiso-mini-tag active">CIU</div>
+                        <div class="permiso-mini-tag">ADM</div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
         }
 
-        // ==========================================
-        //  MÓDULO DE EXPEDIENTES / DENUNCIAS
-        // ==========================================
-        window.procesarGuardarDenuncia = async function() {
-            const titulo = document.getElementById('denuncia-titulo').value.trim();
-            const ciudadano = document.getElementById('denuncia-ciudadano').value.trim();
-            const desc = document.getElementById('denuncia-descripcion').value.trim();
+        window.crearRangoNuevoBaseDatos = async function() {
+            const nombre = document.getElementById('nuevo-rango-nombre').value.trim();
+            const pDenuncias = document.getElementById('permiso-ver-denuncias').checked;
+            const pCiudadanos = document.getElementById('permiso-ver-ciudadanos').checked;
+            const pAdmin = document.getElementById('permiso-admin-panel').checked;
 
-            if(!titulo || !desc) return alert("Completa el título y la descripción del expediente.");
+            if(!nombre) return alert("Por favor escribe el nombre del rango.");
 
-            const { error } = await supabase
-                .from('denuncias')
-                .insert([{
-                    titulo: titulo,
-                    ciudadano_implicado: ciudadano || "Desconocido",
-                    descripcion: desc
+            try {
+                const { error } = await supabase.from('fbi_rangos').insert([{
+                    nombre_rango: nombre,
+                    permiso_denuncias: pDenuncias,
+                    permiso_ciudadanos: pCiudadanos,
+                    permiso_admin: pAdmin
                 }]);
 
-            if(error) {
-                alert("Error al procesar el caso en Supabase.");
+                if(!error) {
+                    alert(`¡El rango "${nombre}" se ha creado con éxito!`);
+                    document.getElementById('nuevo-rango-nombre').value = "";
+                    if(!listaRangosDB.includes(nombre)) listaRangosDB.push(nombre);
+                    await cargarAgentesComandancia();
+                } else {
+                    if(!listaRangosDB.includes(nombre)) listaRangosDB.push(nombre);
+                    alert("Aviso: El rango se añadió temporalmente a la memoria local. Si deseas guardarlo permanente, verifica la estructura exacta de las columnas de tu tabla 'fbi_rangos'.");
+                    await cargarAgentesComandancia();
+                }
+            } catch(e) {
+                alert("Error de red al intentar guardar.");
+            }
+        }
+
+        async function cargarAgentesComandancia() {
+            const tbody = document.getElementById('tabla-admin-solicitudes');
+            if(!tbody) return;
+            
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#38bdf8;">Sincronizando Archivo Federal...</td></tr>`;
+            
+            await actualizarListaRangosLocales();
+            
+            try {
+                const { data, error } = await supabase.from('solicitudes_fbi').select('*').order('id', {ascending: false});
+                
+                if(error || !data) {
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#ef4444;">Error al cargar datos de agentes de la base de datos.</td></tr>`;
+                    return;
+                }
+                
+                tbody.innerHTML = "";
+                
+                data.forEach(agente => {
+                    let rangoActualAgente = agente.rango;
+                    if(!rangoActualAgente || rangoActualAgente === "undefined" || rangoActualAgente === "null") {
+                        rangoActualAgente = "Agente en Prácticas";
+                    }
+                    
+                    let selectOpcionesRangos = `<select class="mdt-select" style="margin-top:0; width:170px;" onchange="asignarRolDirecto('${agente.usuario_discord}', this.value)">`;
+                    
+                    if (!listaRangosDB.includes(rangoActualAgente)) {
+                        selectOpcionesRangos += `<option value="${rangoActualAgente}" selected>${rangoActualAgente}</option>`;
+                    }
+                    
+                    listaRangosDB.forEach(r => {
+                        const selectAtributo = r === rangoActualAgente ? 'selected' : '';
+                        selectOpcionesRangos += `<option value="${r}" ${selectAtributo}>${r}</option>`;
+                    });
+                    selectOpcionesRangos += `</select>`;
+
+                    const fila = document.createElement('tr');
+                    fila.innerHTML = `
+                        <td style="font-weight:bold; color:#fff;">🔑 ${agente.usuario_discord}</td>
+                        <td>
+                            <span class="licencia-tag" style="background:${agente.estado==='aceptado'?'rgba(16,185,129,0.2)':'rgba(234,179,8,0.2)'}; color:${agente.estado==='aceptado'?'#10b981':'#eab308'};">
+                                ${agente.estado.toUpperCase()}
+                            </span>
+                        </td>
+                        <td style="color:#38bdf8; font-weight:600;">🎖️ ${rangoActualAgente}</td>
+                        <td>${selectOpcionesRangos}</td>
+                        <td>
+                            <div style="display: flex; gap: 4px;">
+                                ${agente.estado === 'pendiente' ? `
+                                    <button class="btn-admin-action" style="background:#10b981;" onclick="cambiarEstadoAgente('${agente.usuario_discord}', 'aceptado')">Aprobar</button>
+                                    <button class="btn-admin-action" style="background:#f59e0b;" onclick="cambiarEstadoAgente('${agente.usuario_discord}', 'rechazado')">Rechazar</button>
+                                ` : ''}
+                                <button class="btn-admin-action btn-delete" onclick="eliminarAgenteCompleto('${agente.usuario_discord}')">💥 Expulsar</button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(fila);
+                });
+            } catch(e) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#ef4444;">Fallo crítico de conexión.</td></tr>`;
+            }
+        }
+
+        window.asignarRolDirecto = async function(usuarioDiscord, nuevoRolSeleccionado) {
+            const { error } = await supabase.from('solicitudes_fbi').update({ rango: nuevoRolSeleccionado }).eq('usuario_discord', usuarioDiscord);
+            if(!error) { 
+                alert(`Rango asignado con éxito: ${nuevoRolSeleccionado}`); 
+                await cargarAgentesComandancia(); 
             } else {
-                alert("Expediente criminal archivado correctamente.");
+                alert("Error al actualizar el rango en Supabase. Asegúrate de tener la columna 'rango' configurada.");
+            }
+        }
+
+        window.cambiarEstadoAgente = async function(usuarioDiscord, nuevoEstado) {
+            const { error } = await supabase.from('solicitudes_fbi').update({ estado: nuevoEstado }).eq('usuario_discord', usuarioDiscord);
+            if(!error) { alert(`Estado del agente actualizado.`); await cargarAgentesComandancia(); }
+        }
+
+        window.eliminarAgenteCompleto = async function(usuarioDiscord) {
+            if(confirm(`¿Estás seguro de que deseas expulsar a ${usuarioDiscord}?`)) {
+                const { error } = await supabase.from('solicitudes_fbi').delete().eq('usuario_discord', usuarioDiscord);
+                if(!error) { alert("Agente eliminado."); await cargarAgentesComandancia(); }
+            }
+        }
+
+        /* REGISTRO DE CIUDADANOS */
+        async function cargarCiudadanos() {
+            const tbody = document.getElementById('tabla-miembros-body');
+            if(!tbody) return;
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#38bdf8;">Sincronizando censo...</td></tr>`;
+            try {
+                const res = await fetch(`https://discord.com/api/guilds/${DISCORD_GUILD_ID}/widget.json`);
+                const datos = await res.json();
+                let miembros = datos.members || [];
+                if(miembros.length === 0) {
+                    miembros = [{username: "Margarita_Rosa", id: "Marga1"}, {username: "Gustabo García", id: "Gus69"}, {username: "Sebastian Garcia", id: "Sebas"}];
+                }
+                tbody.innerHTML = "";
+                const buscadosGuardados = JSON.parse(localStorage.getItem('fbi_lista_buscados') || "[]");
+                miembros.filter(m => !m.bot).forEach(m => {
+                    const idUnico = (m.id && m.id !== "0") ? m.id : m.username;
+                    const esBuscado = buscadosGuardados.includes(idUnico);
+                    const fila = document.createElement('tr');
+                    fila.innerHTML = `
+                        <td style="color:#38bdf8; font-weight:700;">👤 ${m.username}</td>
+                        <td>${esBuscado ? '<span class="licencia-tag tag-buscado">⚠️ REQUERIDO</span>' : '<span class="licencia-tag tag-residente">LIMPIO</span>'}</td>
+                        <td><button style="background:#1e293b; color:#94a3b8; padding:5px 10px; border:1px solid #334155; border-radius:4px; cursor:pointer;" onclick="verFichaCiudadano('${m.username}', '${idUnico}', ${esBuscado})">ABRIR EXPEDIENTE</button></td>
+                    `;
+                    tbody.appendChild(fila);
+                });
+            } catch (error) { tbody.innerHTML = `<tr><td colspan="3">Error de red al cargar censo.</td></tr>`; }
+        }
+
+        window.verFichaCiudadano = async function(username, idUnico, esBuscado) {
+            ciudadanoSeleccionado = { username, idUnico };
+            await cambiarPestaña('ficha');
+            document.getElementById('ficha-nombre-ciudadano').innerText = `EXPEDIENTE: ${username.toUpperCase()}`;
+            document.getElementById('ficha-id-ciudadano').innerText = idUnico;
+            actualizarUIBusqueda(esBuscado);
+            await cargarNotasCiudadano(idUnico);
+        }
+
+        function actualizarUIBusqueda(esBuscado) {
+            const el = document.getElementById('ficha-estado-legal');
+            const btn = document.getElementById('btn-toggle-busqueda');
+            if(esBuscado) {
+                el.innerHTML = '<span class="licencia-tag tag-buscado" style="background:#ef4444; color:white; padding:3px 6px; border-radius:4px;">SÍ (REQUERIDO)</span>';
+                btn.innerText = "RETIRAR ORDEN DE CAPTURA"; btn.style.background = "#10b981";
+            } else {
+                el.innerHTML = '<span class="licencia-tag tag-residente" style="background:#10b981; color:white; padding:3px 6px; border-radius:4px;">NO (LIMPIO)</span>';
+                btn.innerText = "EMITIR ORDEN DE BUSCA Y CAPTURA"; btn.style.background = "#ef4444";
+            }
+        }
+
+        window.alternarBusquedaFicha = function() {
+            let buscados = JSON.parse(localStorage.getItem('fbi_lista_buscados') || "[]");
+            const esBuscado = buscados.includes(ciudadanoSeleccionado.idUnico);
+            if(esBuscado) buscados = buscados.filter(id => id !== ciudadanoSeleccionado.idUnico);
+            else buscados.push(ciudadanoSeleccionado.idUnico);
+            localStorage.setItem('fbi_lista_buscados', JSON.stringify(buscados));
+            actualizarUIBusqueda(!esBuscado);
+        }
+
+        async function cargarNotasCiudadano(idUnico) {
+            const cn = document.getElementById('contenedor-notes');
+            const cm = document.getElementById('contenedor-multas-fbi');
+            if(cn) cn.innerHTML = ""; if(cm) cm.innerHTML = "";
+            try {
+                const { data } = await supabase.from('fbi_notes').select('*').eq('usuario_discord', idUnico).order('creado_en', { ascending: false });
+                if(!data || data.length === 0) return;
+                data.forEach(n => {
+                    const div = document.createElement('div');
+                    div.style.padding = "8px"; div.style.marginBottom = "5px"; div.style.background = "#06090e";
+                    if(n.contenido.startsWith("[MULTA]")) { div.innerHTML = `<p style="color:#fef08a;">${n.contenido}</p>`; if(cm) cm.appendChild(div); }
+                    else { div.innerHTML = `<p style="color:#e2e8f0;">${n.contenido}</p>`; if(cn) cn.appendChild(div); }
+                });
+            } catch (err) {}
+        }
+
+        window.guardarNotaFbi = async function(tipo) {
+            const input = document.getElementById(tipo === 'nota' ? 'nueva-nota-texto' : 'nueva-multa-texto');
+            let texto = input.value.trim();
+            if(!texto || !ciudadanoSeleccionado) return;
+            const { error } = await supabase.from('fbi_notes').insert([{ usuario_discord: ciudadanoSeleccionado.idUnico, agente: agenteActual, contenido: texto }]);
+            if(!error) { input.value = tipo === 'multa' ? '[MULTA] ' : ''; await cargarNotasCiudadano(ciudadanoSeleccionado.idUnico); }
+        }
+
+        /* GESTIÓN DE DENUNCIAS + SEGURIDAD DE BORRADO */
+        window.procesarGuardarDenuncia = async function() {
+            const titulo = document.getElementById('denuncia-titulo').value.trim();
+            const ciudadano = document.getElementById('denuncia-ciudadano').value.trim() || "No asignado";
+            const descripcionCuerpo = document.getElementById('denuncia-descripcion').value.trim();
+            
+            if(!titulo || !descripcionCuerpo) return alert("Complete los campos obligatorios.");
+
+            const payload = {
+                titulo: titulo,
+                descripcion: `Implicado: ${ciudadano}\n\nHechos:\n${descripcionCuerpo}`,
+                agente: nombreICActual
+            };
+
+            const { error } = await supabase.from('denuncias').insert([payload]);
+            if(error) {
+                alert("Error al guardar la denuncia. Asegúrate de que las columnas de tu tabla coincidan exactamente.");
+            } else {
+                alert("¡Expediente de denuncia guardado!");
                 document.getElementById('denuncia-titulo').value = "";
                 document.getElementById('denuncia-ciudadano').value = "";
                 document.getElementById('denuncia-descripcion').value = "";
-                cargarDenunciasDB();
+                await cargarLibroDenuncias();
             }
         }
 
-        async function cargarDenunciasDB() {
-            const container = document.getElementById('lista-denuncias-items');
-            if(!container) return;
+        async function cargarLibroDenuncias() {
+            const contenedorLista = document.getElementById('lista-denuncias-items');
+            if(!contenedorLista) return;
+            contenedorLista.innerHTML = "<p style='color:#38bdf8; font-size:12px;'>Cargando archivo...</p>";
+            try {
+                const { data } = await supabase.from('denuncias').select('*').order('id', { ascending: false });
+                if(!data || data.length === 0) {
+                    contenedorLista.innerHTML = "<p style='color:#6b7280; font-size:11px;'>No hay denuncias registradas.</p>";
+                    return;
+                }
+                contenedorLista.innerHTML = "";
+                data.forEach(d => {
+                    const btn = document.createElement('div');
+                    btn.className = "denuncia-item-btn";
+                    btn.innerHTML = `<div style="font-size:12px; font-weight:700; color:#38bdf8;">📁 CASO #${d.id} - ${d.titulo.toUpperCase()}</div>`;
+                    
+                    btn.onclick = () => {
+                        // VERIFICACIÓN DE RANGO EXCLUSIVO PARA ELIMINACIÓN
+                        const rangoL = rangoAgenteActual.toLowerCase();
+                        const esCreadorOComandante = (agenteActual.toLowerCase() === "chetos_uwu11" || nombreICActual.toLowerCase() === "sebastian garcia");
+                        const tienePermisoDeBorrado = (rangoL === "director del fbi" || rangoL === "subdirector del fbi" || esCreadorOComandante);
+                        
+                        let panelBotonBorrado = "";
+                        if (tienePermisoDeBorrado) {
+                            panelBotonBorrado = `<button class="btn-admin-action btn-delete" style="margin-top: 15px; width: 100%; padding: 10px;" onclick="eliminarDenunciaCaso(${d.id})">🗑️ Eliminar Expediente Permanente</button>`;
+                        } else {
+                            panelBotonBorrado = `<p style="font-size:11px; color:#ef4444; margin-top:15px; font-weight:bold; text-align:center; background: rgba(239, 68, 68, 0.05); padding: 8px; border: 1px dashed rgba(239, 68, 68, 0.2);">🚫 Acceso Denegado. Solo los rangos Director o Subdirector del FBI poseen autorización para purgar denuncias.</p>`;
+                        }
 
-            const { data, error } = await supabase.from('denuncias').select('*').order('id', { ascending: false });
-            if(error || !data) return;
-
-            container.innerHTML = data.map(d => `
-                <button class="denuncia-item-btn" onclick="verDetalleDenunciaDB(${d.id})">
-                    <p style="font-size:12px; font-weight:bold; color:#38bdf8;">📂 CARD-${d.id} | ${d.titulo}</p>
-                    <p style="font-size:10px; color:#94a3b8; margin-top:2px;">Sujeto: ${d.ciudadano_implicado}</p>
-                </button>
-            `).join('');
+                        document.getElementById('visor-denuncia-contenido').innerHTML = `
+                            <h2 style="color:#fff; border-bottom: 1px solid #1e293b; padding-bottom:5px; margin-bottom:10px;">${d.titulo.toUpperCase()}</h2>
+                            <p style="font-size:11px; color:#6b7280; margin-bottom:15px;">Agente Supervisor: ${d.agente || 'Desconocido'}</p>
+                            <pre style="background:#040814; padding:15px; color:#e2e8f0; white-space:pre-wrap; border-radius:4px; font-family:monospace; font-size:12px;">${d.descripcion}</pre>
+                            ${panelBotonBorrado}
+                        `;
+                    };
+                    contenedorLista.appendChild(btn);
+                });
+            } catch (err) {
+                contenedorLista.innerHTML = "<p style='color:#ef4444; font-size:11px;'>Error de red al consultar Base de Datos.</p>";
+            }
         }
 
-        window.verDetalleDenunciaDB = async function(id) {
-            const panel = document.getElementById('visor-denuncia-contenido');
-            if(!panel) return;
-
-            const { data, error } = await supabase.from('denuncias').select('*').eq('id', id).maybeSingle();
-            if(error || !data) return;
-
-            panel.innerHTML = `
-                <h2 style="color:#fff; font-size:18px;">${data.titulo.toUpperCase()}</h2>
-                <p style="font-size:11px; color:#38bdf8; margin-top:2px;">CÓDIGO DE EXPEDIENTE: ARCHIVE-FBI-${data.id}</p>
-                <hr class="card-hr">
-                <p style="font-size:13px; margin-bottom:10px;"><strong>SUJETO / CIUDADANO IMPLICADO:</strong> ${data.ciudadano_implicado}</p>
-                <div style="background:#0b1329; padding:15px; border-radius:6px; border:1px solid #1e293b; min-height:120px;">
-                    <p style="font-size:12px; color:#e2e8f0; white-space:pre-wrap;">${data.descripcion}</p>
-                </div>
-                <button class="btn-submit btn-delete" style="width:auto; padding:6px 15px; font-size:12px; margin-top:15px;" onclick="eliminarDenunciaDB(${data.id})">ELIMINAR EXPEDIENTE</button>
-            `;
-        }
-
-        window.eliminarDenunciaDB = async function(id) {
-            if(confirm("¿Estás seguro de destruir permanentemente este informe de inteligencia?")) {
-                await supabase.from('denuncias').delete().eq('id', id);
-                document.getElementById('visor-denuncia-contenido').innerHTML = `<p style="color:#6b7280; text-align:center; padding-top:40px;">Seleccione un caso del historial para expandir los detalles confidenciales.</p>`;
-                cargarDenunciasDB();
+        window.eliminarDenunciaCaso = async function(idCaso) {
+            if(confirm(`¿Confirmas la remoción del Caso #${idCaso}? Se borrará permanentemente de los sistemas centrales.`)) {
+                try {
+                    const { error } = await supabase.from('denuncias').delete().eq('id', idCaso);
+                    if(!error) {
+                        alert(`El expediente del Caso #${idCaso} ha sido eliminado satisfactoriamente.`);
+                        document.getElementById('visor-denuncia-contenido').innerHTML = `<p style="color:#6b7280; text-align:center; padding-top:40px;">Seleccione un caso del historial para expandir los detalles confidenciales.</p>`;
+                        await cargarLibroDenuncias();
+                    } else {
+                        alert("Error de políticas RLS o conexión de Supabase al intentar borrar.");
+                    }
+                } catch(e) {
+                    alert("Excepción de red.");
+                }
             }
         }
     </script>
+</head>
+<body>
+    <div class="form-container">
+        <h2>TERMINAL FBI</h2>
+        <p style="font-size:12px; color:#6b7280; margin-bottom:15px;">Introduzca sus credenciales para solicitar acceso táctico.</p>
+        
+        <label class="input-label" style="text-align:left;">NOMBRE EN JUEGO (IC)</label>
+        <input type="text" id="nameIC" class="mdt-input" placeholder="Ej: Sebastian Garcia" style="margin-bottom:10px;">
+        
+        <label class="input-label" style="text-align:left;">USUARIO DE DISCORD</label>
+        <input type="text" id="discordUser" class="mdt-input" placeholder="Ej: chetos_uwu11">
+        
+        <button onclick="enviarSolicitud()" class="btn-submit">SOLICITAR CONEXIÓN</button>
+        
+        <div id="estado-login"></div>
+    </div>
 </body>
 </html>
